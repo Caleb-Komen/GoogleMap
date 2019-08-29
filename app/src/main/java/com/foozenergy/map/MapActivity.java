@@ -8,8 +8,18 @@ import androidx.core.content.ContextCompat;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.Location;
 import android.os.Bundle;
+import android.util.Log;
+import android.view.KeyEvent;
+import android.view.View;
+import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -20,8 +30,13 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 
 public class MapActivity extends AppCompatActivity implements OnMapReadyCallback {
@@ -31,8 +46,11 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
     public static final String COARSE_LOCATION = Manifest.permission.ACCESS_COARSE_LOCATION;
     public static final int LOCATION_PERMISSION_REQUEST_CODE = 110;
     public static final float DEFAULT_ZOOM = 15f;
+    private static final String TAG = "MapActivity";
     public boolean locationPermissionGranted = false;
-    GoogleMap map;
+    public GoogleMap map;
+    private EditText etSearch;
+    private ImageView gps;
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
@@ -55,6 +73,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
 
             googleMap.getUiSettings().setMyLocationButtonEnabled(false);
             getDeviceLocation();
+            init();
         }
     }
 
@@ -77,6 +96,10 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
                             Location myLocation = task.getResult();
                             map.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(myLocation.getLatitude(), myLocation.getLongitude()),
                                     DEFAULT_ZOOM));
+                            MarkerOptions marker = new MarkerOptions();
+                            marker.position(new LatLng(myLocation.getLatitude(), myLocation.getLongitude()));
+                            marker.title("My Location");
+                            map.addMarker(marker);
                         }else {
                             Toast.makeText(getApplicationContext(), "Something went wrong", Toast.LENGTH_SHORT).show();
                         }
@@ -93,8 +116,61 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_map);
+        etSearch = findViewById(R.id.et_search);
+        gps = findViewById(R.id.gps);
+        gps.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                getDeviceLocation();
+            }
+        });
 
         getLocationPermissions();
+        init();
+    }
+
+    private void init() {
+        Log.d(TAG, "init: initializing");
+        etSearch.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView textView, int actionId, KeyEvent keyEvent) {
+                if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE
+                 || keyEvent.getAction() == KeyEvent.KEYCODE_ENTER || keyEvent.getAction() == KeyEvent.ACTION_DOWN){
+                    //execute method for searching
+                    geoLocate();
+                }
+                return false;
+            }
+        });
+        hideSoftKeyboard();
+    }
+
+    private void geoLocate() {
+        String locationName = etSearch.getText().toString().trim();
+        Geocoder geocoder = new Geocoder(this);
+        List<Address> locations = new ArrayList<>();
+        try {
+            locations = geocoder.getFromLocationName(locationName, 1);
+            if (locations.size() > 0){
+                Address locationAddress = locations.get(0);
+                Log.d(TAG, "geoLocate: " + locationAddress.toString());
+
+                map.moveCamera(CameraUpdateFactory.newLatLngZoom(
+                        new LatLng(locationAddress.getLatitude(), locationAddress.getLongitude()), DEFAULT_ZOOM));
+
+                MarkerOptions markerOptions = new MarkerOptions();
+                markerOptions.position(new LatLng(locationAddress.getLatitude(), locationAddress.getLongitude()));
+                markerOptions.title(locationAddress.getAddressLine(0));
+                map.addMarker(markerOptions);
+
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void hideSoftKeyboard() {
+        this.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
     }
 
     private void getLocationPermissions() {
